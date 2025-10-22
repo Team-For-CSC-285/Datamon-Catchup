@@ -1,188 +1,251 @@
-# -*- coding: utf-8 -*-
 """
-Created on Wed Sep 10 15:33:56 2025
+Memory Bank (Parent/Student) — modular class-based version with debug-friendly architecture.
 
-@author: paulg
+- Clean separation of concerns
+- Configurable data file path
+- Robust JSON handling
+- Testable (I/O is injectable via input_fn / print_fn)
+- Debug utilities (dbg + @trace) + env override DATAMON_DEBUG=1
 """
-
-# imported modules
-import json
+from __future__ import annotations
 import os
+import json
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, Tuple
 
+# --------------------------- Debug Utilities ---------------------------
+def _env_debug() -> bool:
+    v = os.getenv("DATAMON_DEBUG", "").strip().lower()
+    return v in {"1", "true", "yes", "on"}
 
-def if_parent():
-    """
-    Function allows parent to display, create, and clear data within the 
-    data text file only returning to the menu on users input.
-    """
-    
-    #create a empty variable for loop choice
-    parent_choice = ""
-    
-    #Starting loop
-    while parent_choice != "4":
-        dashes = "-" * 15
-        print(f"{dashes} Parent Menu {dashes}")
-        print("1) Display")
-        print("2) Add")
-        print("3) Clear")
-        print("4) Menu")
-        parent_choice = input("Please select from the options given. ").lower()
-        
-        #check if user has input 1
-        if parent_choice == "1":
-            with open("Data.txt", 'r') as file:
-                contents = json.load(file)                
-                print(json.dumps(contents, indent=4))        
-        # checks if user selected 2         
-        elif parent_choice == "2":
-            # Safely checks for existing text file
-            if os.path.exists("Data.txt") and os.path.getsize("Data.txt") > 0:
-                with open("Data.txt", 'r') as file:
-                    try:
-                        contents = json.load(file)
-                    except json.JSONDecodeError:
-                        contents = {}
+def dbg(enabled: bool, *args):
+    if enabled or _env_debug():
+        print("[DEBUG]", *args)
+
+def trace(enabled: bool):
+    def _wrap(fn):
+        def inner(*args, **kwargs):
+            if enabled or _env_debug():
+                arglist = ", ".join(
+                    [repr(a) for a in args] +
+                    [f"{k}={repr(v)}" for k, v in kwargs.items()]
+                )
+                print(f"[TRACE] -> {fn.__name__}({arglist})")
+            result = fn(*args, **kwargs)
+            if enabled or _env_debug():
+                print(f"[TRACE] <- {fn.__name__} => {repr(result)}")
+            return result
+        return inner
+    return _wrap
+
+# --------------------------- Config ---------------------------
+@dataclass
+class MemoryBankConfig:
+    data_path: str = "Data.txt"   # JSON file
+    # UI toggles
+    clear_between_screens: bool = True
+    debug: bool = False
+    # I/O injection for testing
+    input_fn: Callable[[str], str] = input
+    print_fn: Callable[[str], None] = print
+
+# --------------------------- Core Class ---------------------------
+class MemoryBank:
+    def __init__(self, cfg: Optional[MemoryBankConfig] = None):
+        self.cfg = cfg or MemoryBankConfig()
+
+    # ---------- Utilities ----------
+    def clear_screen(self):
+        if not self.cfg.clear_between_screens:
+            return
+        os.system("cls" if os.name == "nt" else "clear")
+
+    @trace(enabled=False)
+    def _safe_load(self) -> Dict[str, List[Dict[str, str]]]:
+        """Load data JSON. Returns {} if file missing/empty/invalid."""
+        path = self.cfg.data_path
+        dbg(self.cfg.debug, "Loading data from", path)
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                # normalize to expected shape: {name: [{problem, answer}, ...]}
+                for k, v in list(data.items()):
+                    if not isinstance(v, list):
+                        data[k] = []
+                return data
+            return {}
+        except (json.JSONDecodeError, OSError) as e:
+            dbg(self.cfg.debug, "Error loading JSON:", e)
+            return {}
+
+    @trace(enabled=False)
+    def _safe_save(self, data: Dict[str, List[Dict[str, str]]]) -> bool:
+        """Save data JSON. Returns True on success."""
+        path = self.cfg.data_path
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+            dbg(self.cfg.debug, "Saved data to", path)
+            return True
+        except OSError as e:
+            dbg(self.cfg.debug, "Error saving JSON:", e)
+            return False
+
+    # ---------- Parent Flow ----------
+    def parent_menu(self):
+        """Interactive parent menu (Display / Add / Clear / Back)."""
+        p = self.cfg.print_fn
+        i = self.cfg.input_fn
+        choice = ""
+
+        while choice != "4":
+            self.clear_screen()
+            dashes = "-" * 15
+            p(f"{dashes} Parent Menu {dashes}")
+            p("1) Display")
+            p("2) Add")
+            p("3) Clear")
+            p("4) Menu")
+            choice = i("Please select from the options given: ").strip().lower()
+
+            if choice == "1":
+                data = self._safe_load()
+                p(json.dumps(data, indent=4))
+
+            elif choice == "2":
+                self._parent_add_flow()
+
+            elif choice == "3":
+                ok = self._safe_save({})
+                p("All Data Cleared." if ok else "Failed to clear data.")
+
+            elif choice == "4":
+                return
             else:
-                contents = {}
-            # asks for user name while also checking if user name in txt file
-            name = input("What is the students name? ").capitalize()
-            if name not in contents:
-                contents[name] = []
-                # user can create up to 5 questions at a time
-                for question in range(5):
-                    problem = input(f"Enter a math problem. {question+1}  (or press enter to stop) ").strip()
-                    if problem == "":
-                        break
-                    answer = input("Enter the answer to the problem. ").strip()
-                    contents[name].append({"problem": problem, "answer": answer})     
-                
-            with open("Data.txt", 'w') as file:
-                json.dump(contents, file, indent=4)
-                print(f"Successfully added record for {name}")
-        #checks if user selected 3        
-        elif parent_choice == "3":
-            # Allows parent user to clear data in file
-            with open("Data.txt", 'w') as file:
-                json.dump({}, file, indent=4)
-                print("All Data Cleared.")
-        elif parent_choice == "4":
-            return
-        else:
-            print("Invalid input")
-            
-def if_student():
-    """
-    Function allows student user to answer question based on the data that the
-    parent user has input into the txt file.
-    """
-    stu_choice = ''
-    
-    # Asks for students name
-    print("Welcome to the Memory Bank")
-    stu_name = input("Enter your name ").capitalize() 
-    
-    # Checks for existing text file
-    if os.path.exists("Data.txt") and os.path.getsize("Data.txt") > 0:
-        with open("Data.txt", 'r') as file:
-            try:
-                contents = json.load(file)
-            except json.JSONDecodeError:
-                contents = {}
-    else:
-        contents = {}
-    # Checks if student name exists in file
-    if stu_name in contents:
-        problems = contents[stu_name]
-        
-    elif stu_name not in contents:
-            print(f"No problems found for {stu_name}. Please ask a parent for questions.")
-            return
-    # Ask student if they're ready for quiz    
-    print(f"Hello {stu_name}")
-    stu_choice = input("Are you ready for your quiz? Yes or No ").lower()
-        
-    # if yes, the start the quiz    
-    if stu_choice == "yes".lower():
-        score = 0
+                p("Invalid input.")
 
-        
-        # iterates throughout the file index and questions
-        for i, q in enumerate(problems, start=1):
-            stu_lives = 2
-            clear_screen()
+            i("\nPress Enter to continue...")
+
+    def _parent_add_flow(self):
+        p = self.cfg.print_fn
+        i = self.cfg.input_fn
+
+        data = self._safe_load()
+        name = i("What is the student's name? ").strip().capitalize()
+        if not name:
+            p("No name provided. Aborting add.")
+            return
+
+        if name not in data:
+            data[name] = []
+
+        p("You can create up to 5 questions. Press Enter on an empty problem to stop.")
+        added = 0
+        for idx in range(5):
+            problem = i(f"Enter a math problem {idx+1}: ").strip()
+            if problem == "":
+                break
+            answer = i("Enter the answer to the problem: ").strip()
+            data[name].append({"problem": problem, "answer": answer})
+            added += 1
+
+        if self._safe_save(data):
+            p(f"Successfully {'updated' if added else 'touched'} record for {name} ({added} problem(s) added).")
+        else:
+            p("Failed to save data.")
+
+    # ---------- Student Flow ----------
+    def student_quiz(self):
+        """Interactive student quiz based on parent-entered problems."""
+        p = self.cfg.print_fn
+        i = self.cfg.input_fn
+
+        self.clear_screen()
+        p("Welcome to the Memory Bank")
+        stu_name = i("Enter your name: ").strip().capitalize()
+        if not stu_name:
+            p("No name provided. Returning to menu.")
+            return
+
+        data = self._safe_load()
+        problems = data.get(stu_name, None)
+        if not problems:
+            p(f"No problems found for {stu_name}. Please ask a parent for questions.")
+            return
+
+        p(f"Hello {stu_name}")
+        ready = i("Are you ready for your quiz? Yes or No: ").strip().lower()
+        if ready not in {"yes", "y"}:
+            p("Returning to main menu.")
+            return
+
+        score = 0
+        for idx, q in enumerate(problems, start=1):
+            lives = 2
             correct = False
-            
-            while stu_lives > 0 and not correct:                
-                print(f"\nQuestion {i}: {q['problem']}")
-                stu_answer = input("Your answer: ")
-                
-                
-                # Adds point to sccore if student is correct
-                if stu_answer.lower() == q["answer"].lower():
-                    print("Correct")
+            while lives > 0 and not correct:
+                self.clear_screen()
+                p(f"Question {idx}: {q.get('problem','')}")
+                ans = i("Your answer: ").strip()
+                if ans.lower() == q.get("answer", "").lower():
+                    p("Correct")
                     score += 1
                     correct = True
                 else:
-                    stu_lives -= 1
-                    if stu_lives > 0:
-                        print(f"Incorrect, lives remaining {stu_lives}")
+                    lives -= 1
+                    if lives > 0:
+                        p(f"Incorrect, lives remaining {lives}")
                     else:
-                        print("Incorrect, out of lives")
+                        p("Incorrect, out of lives")
+                if not correct and lives > 0:
+                    i("Press Enter to try again...")
 
-            
-            # Shows student result of quiz         
-        print(f"Quiz is finished. Your score: {score}/{len(problems)}")            
-    elif stu_choice == "no":
-        print("Returning to main menu.")
-        return
-    else:
-        print("Invalid Input, Please select from options given.")
-                
+        p(f"\nQuiz is finished. Your score: {score}/{len(problems)}")
 
+    # ---------- App Menu ----------
+    def run(self):
+        """Top-level Memory Bank menu: Parent / Student / Done."""
+        p = self.cfg.print_fn
+        i = self.cfg.input_fn
+        choice = ""
 
-def clear_screen():
-    if os.name == 'nt':
-        os.system('cls')
-    else:
-        os.system('clear')
+        while choice != "3":
+            try:
+                self.clear_screen()
+                dashes = "-" * 15
+                p("Welcome to the memory bank!")
+                p(f"{dashes} MENU {dashes}")
+                p("1) Parent")
+                p("2) Student")
+                p("3) Done")
+                choice = i("Please select an option: ").strip()
 
+                if choice == "1":
+                    self.parent_menu()
+                elif choice == "2":
+                    self.student_quiz()
+                elif choice == "3":
+                    p("Terminating Program, thanks for playing...Goodbye.")
+                else:
+                    p("Invalid Input, Please select from options given.")
+            except Exception as e:
+                # keep running, but surface errors when debugging
+                if self.cfg.debug or _env_debug():
+                    raise
+                p(f"An error occurred: {e}")
+                i("Press Enter to continue...")
 
-def main():
-    """ Function allows users to display, add, and clear information into a txt 
-    with Json formatting. 
-    """
-    choice = ""
-    # Starts while loop here.
-    while choice != "3":
-        try:
-            dashes = "-" * 15
-            print("Welcome to the memory bank!")
-            print(f"{dashes} MENU {dashes}")
-            print("1) Parent")
-            print("2) Student")
-            print("3) Done")
-            choice = input("Please select an option. ")
-            
-            # Checks if user is either parent or child.
-            if choice == "1":
-                if_parent()
-            elif choice == "2":
-                if_student()
-            elif choice == "3":
-                print("Terminating Program, thanks for playing...Goodbye.")
-            else:
-                print("Invalid Input, Please select from options given.")
-        except ValueError:
-            print("Invalid Input, Please select from options given.")
-
-# Calling function               
+# --------------------------- Entrypoint ---------------------------
 if __name__ == "__main__":
-    main()                
-                
-        
-        
-        
-        
-        
-        
+    # Example toggles:
+    #   DATAMON_DEBUG=1 python memory_bank.py
+    #   or edit debug/clear flags below
+    app = MemoryBank(MemoryBankConfig(
+        data_path="Data.txt",
+        clear_between_screens=True,
+        debug=False
+    ))
+    app.run()
