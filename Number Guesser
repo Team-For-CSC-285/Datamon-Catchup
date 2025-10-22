@@ -1,74 +1,134 @@
- def _ng_ask_int(prompt: str, lo: int, hi: int) -> int:
-    """Read an int in [lo, hi]."""
-    while True:
-        raw = input(prompt).strip()
-        if raw.lstrip("-").isdigit():
-            n = int(raw)
-            if lo <= n <= hi:
-                return n
-        print(f"Enter a number between {lo} and {hi}.")
+# -*- coding: utf-8 -*-
+"""
+Number Guesser — class-based, debug-friendly module.
 
-def _ng_pause(msg="Press Enter to continue..."):
-    input(msg)
+- Difficulty presets
+- Score logic
+- Player-dict integration 
+- Injected I/O for testing
+- Debug utilities (dbg + @trace) with env override DATAMON_DEBUG=1
+"""
+from __future__ import annotations
+import os
+import time
+import random
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional
 
-def play_number_guesser(player: dict, clear_terminal):
-    clear_terminal()
-    print(r"""
- _   _                 _                 _____                      _            
-| \ | |               | |               / ____|                    | |           
-|  \| |_   _ _ __ ___ | |__   ___ _ __ | |  __ _   _  ___  ___ __ _| | ___  _ __ 
-| . ` | | | | '_ ` _ \| '_ \ / _ \ '__|| | |_ | | | |/ _ \/ __/ _` | |/ _ \| '__|
-| |\  | |_| | | | | | | | | |  __/ |   | |__| | |_| |  __/ (_| (_| | | (_) | |   
-|_| \_|\__,_|_| |_| |_|_| |_|\___|_|    \_____|\__,_|\___|\___\__,_|_|\___/|_|   
-    """)
-    print("Welcome to Number Guesser! Try to find the secret number in limited attempts.\n")
+# --------------------------- Debug Utilities ---------------------------
+def _env_debug() -> bool:
+    v = os.getenv("DATAMON_DEBUG", "").strip().lower()
+    return v in {"1", "true", "yes", "on"}
 
-    levels = {
+def dbg(enabled: bool, *args):
+    if enabled or _env_debug():
+        print("[DEBUG]", *args)
+
+def trace(enabled: bool):
+    def _wrap(fn):
+        def inner(*args, **kwargs):
+            if enabled or _env_debug():
+                arglist = ", ".join(
+                    [repr(a) for a in args] +
+                    [f"{k}={repr(v)}" for k, v in kwargs.items()]
+                )
+                print(f"[TRACE] -> {fn.__name__}({arglist})")
+            result = fn(*args, **kwargs)
+            if enabled or _env_debug():
+                print(f"[TRACE] <- {fn.__name__} => {repr(result)}")
+            return result
+        return inner
+    return _wrap
+
+# --------------------------- Config ---------------------------
+@dataclass
+class NumberGuesserConfig:
+    clear_between_screens: bool = True
+    debug: bool = False
+    # I/O injection
+    input_fn: Callable[[str], str] = input
+    print_fn: Callable[[str], None] = print
+
+# --------------------------- Core Class ---------------------------
+class NumberGuesser:
+    BANNER = r"""
+ number guesser   
+"""
+
+    LEVELS = {
         1: {"name": "Easy",   "range": (1, 10),  "tries": 5},
         2: {"name": "Normal", "range": (1, 50),  "tries": 7},
         3: {"name": "Hard",   "range": (1, 100), "tries": 9},
     }
 
-    while True:
-        print("Choose difficulty:")
-        for k, v in levels.items():
-            lo, hi = v["range"]
-            print(f" {k}) {v['name']}  — range {lo}-{hi}, tries: {v['tries']}")
-        choice = _ng_ask_int("> ", 1, 3)
+    def __init__(self, cfg: Optional[NumberGuesserConfig] = None):
+        self.cfg = cfg or NumberGuesserConfig()
 
-        cfg = levels[choice]
-        lo, hi = cfg["range"]
-        tries = cfg["tries"]
+    # ---------- Utilities ----------
+    def clear(self):
+        if not self.cfg.clear_between_screens:
+            return
+        os.system("cls" if os.name == "nt" else "clear")
+
+    def _ask_int(self, prompt: str, lo: int, hi: int) -> Optional[int]:
+        i = self.cfg.input_fn
+        p = self.cfg.print_fn
+        while True:
+            raw = i(prompt).strip()
+            if raw.lower() in {"q", "quit", "exit"}:
+                return None
+            if raw.lstrip("-").isdigit():
+                n = int(raw)
+                if lo <= n <= hi:
+                    return n
+            p(f"Enter a number between {lo} and {hi}, or 'q' to cancel.")
+
+    # ---------- Round Logic ----------
+    @trace(enabled=False)
+    def play_round(self, level_key: int, player: Optional[Dict] = None) -> Dict:
+        """Play a single round. Returns a summary dict. Optionally updates player dict."""
+        p = self.cfg.print_fn
+        i = self.cfg.input_fn
+
+        level = self.LEVELS.get(level_key)
+        if not level:
+            raise ValueError("Invalid level selected.")
+
+        lo, hi = level["range"]
+        tries = level["tries"]
         secret = random.randint(lo, hi)
-
-        guesses = []
+        guesses: List[Dict[str, int | str]] = []
         win = False
 
-        clear_terminal()
-        print(f"Difficulty: {cfg['name']} (guess {lo}..{hi}) — {tries} attempts.")
+        self.clear()
+        p(f"Difficulty: {level['name']} (guess {lo}..{hi}) — {tries} attempts.")
+
         for attempt in range(1, tries + 1):
-            g = _ng_ask_int(f"Attempt {attempt}/{tries} — your guess: ", lo, hi)
+            g = self._ask_int(f"Attempt {attempt}/{tries} — your guess: ", lo, hi)
+            if g is None:
+                p("↩️  Canceled round.")
+                break
             if g == secret:
-                print("✅ Correct! You found it.")
+                p("✅ Correct! You found it.")
                 guesses.append({"guess": g, "hint": "correct"})
                 win = True
                 break
             hint = "higher" if g < secret else "lower"
-            print(f"❌ Nope. Try {hint}.")
+            p(f"❌ Nope. Try {hint}.")
             guesses.append({"guess": g, "hint": hint})
 
-        # Scoring
+        # scoring
         if win:
             points = max(10, 100 - 10 * (len(guesses) - 1))
             if len(guesses) <= 3:
                 points += 20
         else:
-            print(f"\nThe number was: {secret}")
+            p(f"\nThe number was: {secret}")
             points = 0
 
-        round_summary = {
+        summary = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "difficulty": cfg["name"],
+            "difficulty": level["name"],
             "range": {"lo": lo, "hi": hi},
             "secret": secret,
             "guesses": guesses,
@@ -76,12 +136,51 @@ def play_number_guesser(player: dict, clear_terminal):
             "attempts_used": len(guesses),
             "points": points,
         }
-        player["number_guesser"].append(round_summary)
-        player["score_number_guesser"] += points
 
-        print(f"\nRound points: {points} | Total Number-Guesser score: {player['score_number_guesser']}")
-        again = input("\nPlay another round? (y/n): ").strip().lower()
-        if again != "y":
-            break
+        # optional player integration
+        if isinstance(player, dict):
+            player.setdefault("number_guesser", []).append(summary)
+            player["score_number_guesser"] = player.get("score_number_guesser", 0) + points
 
-    _ng_pause()
+        dbg(self.cfg.debug, "Round summary:", summary)
+        return summary
+
+    # ---------- App Loop ----------
+    def run(self, player: Optional[Dict] = None):
+        p = self.cfg.print_fn
+        i = self.cfg.input_fn
+
+        self.clear()
+        p(self.BANNER)
+        p("Welcome to Number Guesser! Try to find the secret number in limited attempts.\n")
+
+        while True:
+            p("Choose difficulty:")
+            for k, v in self.LEVELS.items():
+                lo, hi = v["range"]
+                p(f" {k}) {v['name']}  — range {lo}-{hi}, tries: {v['tries']}")
+
+            choice = self._ask_int("> ", 1, 3)
+            if choice is None:
+                p("Returning...")
+                break
+
+            summary = self.play_round(choice, player)
+
+            p(f"\nRound points: {summary['points']}")
+            if isinstance(player, dict):
+                p(f"Total Number-Guesser score: {player.get('score_number_guesser', 0)}")
+
+            again = i("\nPlay another round? (y/n): ").strip().lower()
+            if again != "y":
+                break
+
+        self.cfg.input_fn("Press Enter to continue...")
+
+# --------------------------- Entrypoint ---------------------------
+if __name__ == "__main__":
+    # Standalone play (no player dict), with optional debug via DATAMON_DEBUG=1
+    NumberGuesser(NumberGuesserConfig(
+        clear_between_screens=True,
+        debug=False
+    )).run()
