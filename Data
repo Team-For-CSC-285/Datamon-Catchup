@@ -1,0 +1,24 @@
+{
+    "Example": [
+        {
+            "problem": "10 * 5",
+            "answer": "50"
+        },
+        {
+            "problem": "20 / 10",
+            "answer": "2"
+        },
+        {
+            "problem": "100 + 120",
+            "answer": "220"
+        },
+        {
+            "problem": "60 - 30",
+            "answer": "30"
+        },
+        {
+            "problem": "12 * 12",
+            "answer": "144"
+        }
+    ]
+}
