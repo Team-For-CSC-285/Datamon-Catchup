@@ -1,66 +1,343 @@
-import re
+"""
+MathChecker — class-based, debug-friendly mini-game suite
 
-def math_checker():
-    print("Welcome to the Math Checker!")
-    print("Enter your own math problem using +, -, *, or /")
-    print("Numbers must be WHOLE numbers between 0 and 100.")
-    print("Type 'exit' anytime to quit.\n")
+Includes rounds for:
+- Division (quotient + remainder)
+- Addition
+- Subtraction
+- Multiplication
 
-    while True:
-        problem = input("Enter your math problem (example: 25+36): ")
+All rounds log attempts to player["answer_checker"] with a consistent schema and
+increment player["score_answer_checker"] for correct answers.
 
-        if problem.lower() == "exit":
-            print("Goodbye! Keep practicing your math!")
-            break
+Debug controls:
+- Pass debug=True to MathCheckerConfig OR set env DATAMON_DEBUG=1
+- All I/O is injectable (input_fn, print_fn) for easy testing
+"""
+from __future__ import annotations
+import os
+from dataclasses import dataclass
+from typing import Callable, Dict, Optional, Tuple
 
-        # Remove extra spaces
-        problem = problem.replace(" ", "")
+# --------------------------- Debug Utilities ---------------------------
+def _env_debug() -> bool:
+    v = os.getenv("DATAMON_DEBUG", "").strip().lower()
+    return v in {"1", "true", "yes", "on"}
 
-        # Use regex to split number/operator/number
-        match = re.match(r"^(\d+)([+\-*/])(\d+)$", problem)
-        if not match:
-            print("❌ Please enter in format like 25+36 or 25 + 36 (whole numbers only).")
-            continue
+def dbg(enabled: bool, *args):
+    if enabled or _env_debug():
+        print("[DEBUG]", *args)
 
-        num1, operator, num2 = match.groups()
-        num1 = int(num1)
-        num2 = int(num2)
+def trace(enabled: bool):
+    def _wrap(fn):
+        def inner(*args, **kwargs):
+            if enabled or _env_debug():
+                arglist = ", ".join(
+                    [repr(a) for a in args] +
+                    [f"{k}={repr(v)}" for k, v in kwargs.items()]
+                )
+                print(f"[TRACE] -> {fn.__name__}({arglist})")
+            result = fn(*args, **kwargs)
+            if enabled or _env_debug():
+                print(f"[TRACE] <- {fn.__name__} => {repr(result)}")
+            return result
+        return inner
+    return _wrap
 
-        # Range check
-        if not (0 <= num1 <= 100 and 0 <= num2 <= 100):
-            print("❌ Numbers must be between 0 and 100.")
-            continue
+# --------------------------- Config ---------------------------
+@dataclass
+class MathCheckerConfig:
+    min_num: int = 0
+    max_num: int = 100
+    retries: int = 2                       # retries after the first attempt
+    nonnegative_remainder: bool = True     # remainder must be >= 0
+    clear_between_screens: bool = True
+    debug: bool = False
+    # I/O injection
+    input_fn: Callable[[str], str] = input
+    print_fn: Callable[[str], None] = print
 
-        # Compute correct answer
-        if operator == '+':
-            correct_answer = num1 + num2
-        elif operator == '-':
-            correct_answer = num1 - num2
-        elif operator == '*':
-            correct_answer = num1 * num2
-        elif operator == '/':
-            if num2 == 0:
-                print("❌ Division by zero is not allowed.")
-                continue
-            if num1 % num2 != 0:  # must divide evenly
-                print("❌ Division must result in a whole number.")
-                continue
-            correct_answer = num1 // num2
+# --------------------------- Core Class ---------------------------
+class MathChecker:
+    def __init__(self, cfg: Optional[MathCheckerConfig] = None):
+        self.cfg = cfg or MathCheckerConfig()
 
-        # Ask student for their answer
-        user_input = input(f"What answer did you get for {num1} {operator} {num2}? ")
-        if user_input.lower() == "exit":
-            print("Goodbye! Keep practicing your math!")
-            break
+    # ---------- Utilities ----------
+    def _clear(self):
+        if not self.cfg.clear_between_screens:
+            return
+        os.system("cls" if os.name == "nt" else "clear")
 
+    def _ask_int(self, prompt: str, *, allow_negative: bool = True) -> Optional[int]:
+        i = self.cfg.input_fn
+        p = self.cfg.print_fn
+        while True:
+            raw = i(prompt).strip()
+            if raw.lower() in {"q", "quit", "exit"}:
+                return None
+            if raw.lstrip("-").isdigit():
+                n = int(raw)
+                if not allow_negative and n < 0:
+                    p("❌ Please enter a non-negative integer (or 'q' to cancel).")
+                    continue
+                return n
+            p("❌ Invalid number. Try again (or type 'q' to cancel).")
+
+    def _clamp_check(self, n: int) -> bool:
+        return self.cfg.min_num <= n <= self.cfg.max_num
+
+    def _record_attempt(self, player: Dict, problem_str: str, user_str: str,
+                        correct_str: str, is_correct: bool) -> None:
+        if not isinstance(player, dict):
+            return
+        player.setdefault("answer_checker", []).append({
+            "problem": problem_str,
+            "user_answer": user_str,
+            "correct_answer": correct_str,
+            "correct": is_correct
+        })
+        if is_correct:
+            player["score_answer_checker"] = player.get("score_answer_checker", 0) + 1
+
+    # ---------- Division Problem ----------
+    @trace(enabled=False)
+    def _compute_division(self, a: int, b: int) -> Tuple[int, int]:
+        if b == 0:
+            raise ZeroDivisionError("Division by zero.")
+        q, r = divmod(a, b)
+        if self.cfg.nonnegative_remainder and r < 0:
+            # For completeness; Python divmod ensures nonnegative remainder for positive divisor
+            raise ValueError("Negative remainder not allowed.")
+        return q, r
+
+    def play_division_problem(self, player: Dict) -> None:
+        """
+        Play *one* division problem. Prompts for A, B, then asks for quotient and remainder.
+        Applies retry logic and logs the attempt into player['answer_checker'].
+        """
+        p = self.cfg.print_fn
+        debug = self.cfg.debug or _env_debug()
+
+        # Ask for operands A, B within configured bounds
+        self._clear()
+        p("Division Checker — enter two integers (A ÷ B)")
+        a = self._ask_int(f" Enter A [{self.cfg.min_num}..{self.cfg.max_num}]: ", allow_negative=False)
+        if a is None:
+            p("↩️  Canceled problem.")
+            return
+
+        b = self._ask_int(f" Enter B (non-zero) [{self.cfg.min_num}..{self.cfg.max_num}]: ", allow_negative=False)
+        if b is None:
+            p("↩️  Canceled problem.")
+            return
+
+        # Range checks
+        if not self._clamp_check(a) or not self._clamp_check(b):
+            p(f"❌ Numbers must be between {self.cfg.min_num} and {self.cfg.max_num}.")
+            return
+        if b == 0:
+            p("❌ Division by zero is not allowed.")
+            return
+
+        # Compute correct answer (quotient, remainder)
         try:
-            user_answer = int(user_input)  # whole number only
-            if user_answer == correct_answer:
-                print("✅ Correct! Great job!\n")
-            else:
-                print("❌ Incorrect, try again!\n")
-        except ValueError:
-            print("❌ Invalid input. Please enter a whole number.")
+            q_correct, r_correct = self._compute_division(a, b)
+        except Exception as e:
+            p(f"❌ {e}")
+            return
 
-# Run it
-math_checker()
+        problem_str = f"{a} ÷ {b}"
+        correct_str = f"q={q_correct}, r={r_correct}"
+        dbg(debug, f"Problem: {problem_str}, Correct: {correct_str}")
+
+        # Ask user for q, r with retries
+        retries = self.cfg.retries
+        got_it = False
+
+        q_user = self._ask_int(" Quotient: ", allow_negative=True)
+        if q_user is None:
+            p("↩️  Canceled problem.")
+            return
+        r_user = self._ask_int(" Remainder: ", allow_negative=not self.cfg.nonnegative_remainder)
+        if r_user is None:
+            p("↩️  Canceled problem.")
+            return
+
+        while True:
+            if (q_user == q_correct) and (r_user == r_correct):
+                p("✅ Correct!")
+                got_it = True
+            else:
+                p(f"❌ Incorrect. Try again. ({retries} retry{'ies' if retries != 1 else ''} left)")
+                if retries == 0:
+                    p(f"Correct answer: {correct_str}")
+                    break
+                retries -= 1
+                q_user = self._ask_int(" Quotient: ", allow_negative=True)
+                if q_user is None:
+                    break
+                r_user = self._ask_int(" Remainder: ", allow_negative=not self.cfg.nonnegative_remainder)
+                if r_user is None:
+                    break
+                continue
+            break
+
+        user_str = f"q={q_user}, r={r_user}"
+        self._record_attempt(player, problem_str, user_str, correct_str, got_it)
+
+    def run_division_session(self, player: Dict):
+        """Run a division round of N problems, then summarize."""
+        p = self.cfg.print_fn
+
+        self._clear()
+        p("Division Practice — Quotient + Remainder")
+        n = self._ask_int("How many problems this round? (default 5): ", allow_negative=False)
+        total = n if (isinstance(n, int) and n > 0) else 5
+
+        before_len = len(player.get("answer_checker", []))
+        before_score = player.get("score_answer_checker", 0)
+
+        for _ in range(total):
+            self.play_division_problem(player)
+            p("")
+
+        # summary
+        after_len = len(player.get("answer_checker", []))
+        after_score = player.get("score_answer_checker", 0)
+        added = after_len - before_len
+        gained = after_score - before_score
+
+        self._clear()
+        p("Session complete!\n")
+        p(f"Problems attempted: {added}")
+        p(f"Points gained: {gained}")
+        p(f"Total Answer-Checker score: {after_score}")
+        self.cfg.input_fn("\nPress Enter to continue...")
+
+    # ---------- Shared unary-answer flow (+, -, *) ----------
+    def _play_single_answer_problem(self, player: Dict, op: str, banner: str):
+        """
+        Generic runner for +, -, * where the answer is a single integer.
+        """
+        p = self.cfg.print_fn
+        debug = self.cfg.debug or _env_debug()
+
+        self._clear()
+        p(banner)
+        prompt_a = f" Enter A [{self.cfg.min_num}..{self.cfg.max_num}]: "
+        prompt_b = f" Enter B [{self.cfg.min_num}..{self.cfg.max_num}]: "
+        a = self._ask_int(prompt_a, allow_negative=False)
+        if a is None:
+            p("↩️  Canceled problem.")
+            return
+        b = self._ask_int(prompt_b, allow_negative=False)
+        if b is None:
+            p("↩️  Canceled problem.")
+            return
+
+        if not self._clamp_check(a) or not self._clamp_check(b):
+            p(f"❌ Numbers must be between {self.cfg.min_num} and {self.cfg.max_num}.")
+            return
+
+        if op == "+":
+            correct = a + b
+            problem_str = f"{a} + {b}"
+        elif op == "-":
+            correct = a - b
+            problem_str = f"{a} - {b}"
+        elif op == "*":
+            correct = a * b
+            problem_str = f"{a} × {b}"
+        else:
+            p("❌ Unsupported operator.")
+            return
+
+        correct_str = str(correct)
+        dbg(debug, f"Problem: {problem_str}, Correct: {correct_str}")
+
+        retries = self.cfg.retries
+        got_it = False
+
+        ans = self._ask_int(" Your answer: ", allow_negative=True)
+        if ans is None:
+            p("↩️  Canceled problem.")
+            return
+
+        while True:
+            if ans == correct:
+                p("✅ Correct!")
+                got_it = True
+            else:
+                p(f"❌ Incorrect. Try again. ({retries} retry{'ies' if retries != 1 else ''} left)")
+                if retries == 0:
+                    p(f"Correct answer: {correct_str}")
+                    break
+                retries -= 1
+                ans = self._ask_int(" Your answer: ", allow_negative=True)
+                if ans is None:
+                    break
+                continue
+            break
+
+        self._record_attempt(player, problem_str, str(ans), correct_str, got_it)
+
+    # Public helpers for each operation
+    def play_addition_problem(self, player: Dict):
+        self._play_single_answer_problem(player, "+", "Addition Checker — enter two integers (A + B)")
+
+    def play_subtraction_problem(self, player: Dict):
+        self._play_single_answer_problem(player, "-", "Subtraction Checker — enter two integers (A - B)")
+
+    def play_multiplication_problem(self, player: Dict):
+        self._play_single_answer_problem(player, "*", "Multiplication Checker — enter two integers (A × B)")
+
+    # Session runners
+    def run_addition_session(self, player: Dict):
+        self._run_unary_session(player, self.play_addition_problem, "Addition Practice")
+
+    def run_subtraction_session(self, player: Dict):
+        self._run_unary_session(player, self.play_subtraction_problem, "Subtraction Practice")
+
+    def run_multiplication_session(self, player: Dict):
+        self._run_unary_session(player, self.play_multiplication_problem, "Multiplication Practice")
+
+    def _run_unary_session(self, player: Dict, fn, title: str):
+        p = self.cfg.print_fn
+        self._clear()
+        p(f"{title}")
+        n = self._ask_int("How many problems this round? (default 5): ", allow_negative=False)
+        total = n if (isinstance(n, int) and n > 0) else 5
+
+        before_len = len(player.get("answer_checker", []))
+        before_score = player.get("score_answer_checker", 0)
+
+        for _ in range(total):
+            fn(player)
+            p("")
+
+        after_len = len(player.get("answer_checker", []))
+        after_score = player.get("score_answer_checker", 0)
+        added = after_len - before_len
+        gained = after_score - before_score
+
+        self._clear()
+        p("Session complete!\n")
+        p(f"Problems attempted: {added}")
+        p(f"Points gained: {gained}")
+        p(f"Total Answer-Checker score: {after_score}")
+        self.cfg.input_fn("\nPress Enter to continue...")
+
+# --------------------------- Demo Entrypoint ---------------------------
+if __name__ == "__main__":
+    # Standalone demo with a simple player dict.
+    player = {
+        "name": "Tester",
+        "answer_checker": [],
+        "score_answer_checker": 0
+    }
+    game = MathChecker(MathCheckerConfig(
+        min_num=0, max_num=100, retries=2,
+        nonnegative_remainder=True,
+        clear_between_screens=True,
+        debug=False
+    ))
