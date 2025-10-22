@@ -6,5 +6,5 @@ This system is ideal for students studying alone, families without paid tutoring
 
 # Datamon-Catchup (Streamlit + CLI)
 
-Datamon is an **accessible, browser-first** math learning suite built for students who may not have tutors, paid apps, or powerful devices. Powered by **Streamlit**, it runs in any modern browser so **anyone with basic Wi‑Fi or cell data** can practice math instantly. This repo also includes the original **CLI mini-games** (Addition, Subtraction, Multiplication, and Division with quotient + remainder) and a **Memory Bank** tool so parents or teachers can add custom problems.
+Datamon is an accessible, browser-first** math learning suite built for students who may not have tutors, paid apps, or powerful devices. Powered by Streamlit, it runs in any modern browser so **anyone with basic Wi‑Fi or cell data** can practice math instantly. This repo also includes the original CLI mini-games** (Addition, Subtraction, Multiplication, and Division with quotient + remainder) and a **Memory Bank tool so parents or teachers can add custom problems.
 
