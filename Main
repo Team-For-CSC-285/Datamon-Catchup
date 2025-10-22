@@ -13,7 +13,7 @@ from math_checker import MathChecker, MathCheckerConfig
 from number_guesser import NumberGuesser, NumberGuesserConfig
 from memory_bank import MemoryBank, MemoryBankConfig
 
-# --------------------------- Utils ---------------------------
+# --------------------------- Utils 🔧---------------------------
 def env_debug() -> bool:
     v = os.getenv("DATAMON_DEBUG", "").strip().lower()
     return v in {"1", "true", "on", "yes"}
@@ -29,7 +29,7 @@ def pause(msg="Press Enter to continue..."):
     except EOFError:
         pass
 
-# --------------------------- Player ---------------------------
+# --------------------------- Player 🎮 ---------------------------
 def new_player(name: str = "Player") -> Dict:
     return {
         "name": name,
@@ -44,7 +44,7 @@ def new_player(name: str = "Player") -> Dict:
         "score_number_guesser": 0,
     }
 
-# --------------------------- Menus ---------------------------
+# --------------------------- Menus 📋---------------------------
 def print_header(title: str):
     clear()
     print("=" * 70)
