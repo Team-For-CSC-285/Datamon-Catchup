@@ -1,14 +1,14 @@
-
-# app.py — Datamon segmented Flask API
+# app.py — Datamon Flask API (Fixed for Deployment)
 
 from __future__ import annotations
 from flask import Flask, request, jsonify
 import random
+import os
 
-# Your existing modules
-from math_checker import MathChecker
-from number_guesser import NumberGuesser  
-from memory_bank import MemoryBank
+# Fixed imports (no spaces in module names)
+from mathchecker import MathChecker, MathCheckerConfig
+from numberguesser import NumberGuesser, NumberGuesserConfig
+from memorybank import MemoryBank, MemoryBankConfig
 
 
 # ---------------- Player ----------------
@@ -153,19 +153,22 @@ def ng_guess():
 
 @app.route("/memory/problems/<name>", methods=["GET"])
 def mb_get(name):
+    """Get problems for a student from the Memory Bank data file."""
     mb = MemoryBank(MemoryBankConfig(data_path="Data.txt"))
-    problems = mb.get_student_problems(name)
+    data = mb._safe_load()
+    problems = data.get(name.capitalize(), [])
     return jsonify(problems)
 
 
 @app.route("/memory/submit", methods=["POST"])
 def mb_submit():
     data = request.get_json(force=True)
-    student = data.get("student", "")
+    student = data.get("student", "").capitalize()
     answers = data.get("answers", [])
 
     mb = MemoryBank(MemoryBankConfig(data_path="Data.txt"))
-    problems = mb.get_student_problems(student)
+    student_data = mb._safe_load()
+    problems = student_data.get(student, [])
 
     score = 0
     graded = []
@@ -744,5 +747,6 @@ def home():
 # ======================================================
 
 if __name__ == "__main__":
+    # Use PORT from environment (required for deployment platforms)
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
