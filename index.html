@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datamon Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .view-section { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .view-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px);} to { opacity: 1; transform: translateY(0);} }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200 font-sans min-h-screen flex flex-col">
+
+    <!-- NAVBAR -->
+    <nav class="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3 cursor-pointer" onclick="switchView('home')">
+                <div class="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center text-slate-950 font-bold">D</div>
+                <h1 class="text-xl font-bold text-white tracking-tight">Datamon</h1>
+            </div>
+            <button onclick="switchView('hud'); updateHud();" class="text-sm font-medium bg-slate-800 hover:bg-slate-700 transition px-4 py-2 rounded-full flex items-center gap-2">
+                <span>📊 Stats</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- MAIN AREA -->
+    <main class="flex-grow p-6 max-w-5xl mx-auto w-full">
+        
+        <!-- HOME -->
+        <div id="view-home" class="view-section active">
+            <div class="text-center mb-12 mt-4">
+                <h2 class="text-3xl font-bold text-white mb-2">Welcome, Player</h2>
+                <p class="text-slate-400">Select a module to begin your training.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-green-500/50 transition hover:shadow-lg hover:shadow-green-500/10 group cursor-pointer" onclick="switchView('math')">
+                    <div class="w-12 h-12 bg-green-500/10 text-green-400 rounded-xl flex items-center justify-center text-2xl mb-4 group-hover:bg-green-500 group-hover:text-slate-950 transition">➕</div>
+                    <h3 class="text-xl font-bold text-white mb-2">Math Checker</h3>
+                    <p class="text-slate-400 text-sm">Practice addition, subtraction, and multiplication.</p>
+                </div>
+
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-blue-500/50 transition hover:shadow-lg hover:shadow-blue-500/10 group cursor-pointer" onclick="switchView('number')">
+                    <div class="w-12 h-12 bg-blue-500/10 text-blue-400 rounded-xl flex items-center justify-center text-2xl mb-4 group-hover:bg-blue-500 group-hover:text-slate-950 transition">🔢</div>
+                    <h3 class="text-xl font-bold text-white mb-2">Number Guesser</h3>
+                    <p class="text-slate-400 text-sm">Logic game. Higher/lower hints.</p>
+                </div>
+
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-purple-500/50 transition hover:shadow-lg hover:shadow-purple-500/10 group cursor-pointer" onclick="switchView('memory')">
+                    <div class="w-12 h-12 bg-purple-500/10 text-purple-400 rounded-xl flex items-center justify-center text-2xl mb-4 group-hover:bg-purple-500 group-hover:text-slate-950 transition">🧠</div>
+                    <h3 class="text-xl font-bold text-white mb-2">Memory Bank</h3>
+                    <p class="text-slate-400 text-sm">Load quizzes created by parents or teachers.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- MATH -->
+        <div id="view-math" class="view-section">
+            <button onclick="switchView('home')" class="mb-6 text-slate-400 hover:text-white flex items-center gap-2">← Back</button>
+            <div class="max-w-md mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center shadow-xl">
+                <h2 class="text-2xl font-bold text-green-400 mb-6">Math Checker</h2>
+                
+                <div id="math-display" class="bg-slate-950 rounded-xl p-6 mb-6 border border-slate-800">
+                    <p id="math-problem-text" class="text-3xl font-mono font-bold text-white">Ready?</p>
+                </div>
+
+                <div class="space-y-4">
+                    <button onclick="fetchMathProblem()" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl transition">🎲 New Problem</button>
+                    
+                    <div class="flex gap-2">
+                        <input type="number" id="math-answer" placeholder="Answer" class="flex-1 bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl">
+                        <button onclick="submitMathAnswer()" class="bg-slate-700 hover:bg-slate-600 text-white font-bold px-6 rounded-xl transition">Check</button>
+                    </div>
+                </div>
+
+                <div id="math-status" class="mt-6 min-h-[1.5rem] font-medium"></div>
+            </div>
+        </div>
+
+        <!-- NUMBER GUESSER -->
+        <div id="view-number" class="view-section">
+            <button onclick="switchView('home')" class="mb-6 text-slate-400 hover:text-white flex items-center gap-2">← Back</button>
+            <div class="max-w-md mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center shadow-xl">
+                <h2 class="text-2xl font-bold text-blue-400 mb-6">Number Guesser</h2>
+                
+                <div class="bg-slate-950 rounded-xl p-6 mb-6 border border-slate-800">
+                    <p id="ng-range" class="text-xl text-slate-300 mb-2">Range: Unknown</p>
+                    <p id="ng-status" class="text-blue-400 font-medium">Press Start</p>
+                </div>
+
+                <div class="space-y-4">
+                    <button onclick="startNumberGame()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition">🎯 Start Game</button>
+                    
+                    <div class="flex gap-2">
+                        <input type="number" id="ng-guess" placeholder="Guess" class="flex-1 bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl">
+                        <button onclick="submitNumberGuess()" class="bg-slate-700 hover:bg-slate-600 text-white font-bold px-6 rounded-xl transition">Guess</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MEMORY BANK -->
+        <div id="view-memory" class="view-section">
+            <button onclick="switchView('home')" class="mb-6 text-slate-400 hover:text-white flex items-center gap-2">← Back</button>
+            
+            <div class="max-w-2xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-xl">
+                <h2 class="text-2xl font-bold text-purple-400 mb-6 text-center">Memory Bank</h2>
+                
+                <div class="flex gap-3 mb-8">
+                    <input type="text" id="mb-student" placeholder="Enter Student Name..." class="flex-1 bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl">
+                    <button onclick="loadMemoryQuestions()" class="bg-purple-600 hover:bg-purple-500 text-white font-bold px-6 rounded-xl transition">Load</button>
+                </div>
+
+                <div id="mb-container" class="space-y-4 mb-6 hidden"></div>
+
+                <div id="mb-status" class="text-center text-slate-400 italic mb-4">Enter a name.</div>
+
+                <button id="mb-submit-btn" onclick="submitMemoryQuiz()" class="w-full bg-slate-700 text-slate-500 font-bold py-3 rounded-xl cursor-not-allowed" disabled>Submit Quiz</button>
+            </div>
+        </div>
+
+        <!-- HUD -->
+        <div id="view-hud" class="view-section">
+            <button onclick="switchView('home')" class="mb-6 text-slate-400 hover:text-white flex items-center gap-2">← Back</button>
+            
+            <h2 class="text-3xl font-bold text-white mb-8 text-center">Player Stats</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+                <div class="bg-slate-900 p-6 rounded-2xl border-t-4 border-green-500 text-center">
+                    <h3 class="text-slate-400 uppercase text-xs font-bold tracking-wider mb-2">Math Score</h3>
+                    <p id="hud-math" class="text-4xl font-bold text-white">0</p>
+                </div>
+                <div class="bg-slate-900 p-6 rounded-2xl border-t-4 border-blue-500 text-center">
+                    <h3 class="text-slate-400 uppercase text-xs font-bold tracking-wider mb-2">Guesser Score</h3>
+                    <p id="hud-guess" class="text-4xl font-bold text-white">0</p>
+                </div>
+                <div class="bg-slate-900 p-6 rounded-2xl border-t-4 border-purple-500 text-center">
+                    <h3 class="text-slate-400 uppercase text-xs font-bold tracking-wider mb-2">Memory Score</h3>
+                    <p id="hud-memory" class="text-4xl font-bold text-white">0</p>
+                </div>
+            </div>
+
+            <div class="mt-12 bg-slate-900 rounded-2xl p-8 border border-slate-800 max-w-4xl mx-auto">
+                <h3 class="text-xl font-bold text-white mb-4">Active Profile</h3>
+                <pre id="hud-json" class="bg-slate-950 p-4 rounded-xl text-green-400 font-mono text-sm overflow-x-auto">Loading...</pre>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function switchView(viewId) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            document.getElementById('view-' + viewId).classList.add('active');
+        }
+
+        // MATH
+        let currentMathProblem = null;
+        async function fetchMathProblem() {
+            const res = await fetch("/math/problem");
+            const data = await res.json();
+            currentMathProblem = data.problem;
+            document.getElementById("math-problem-text").textContent = data.problem;
+            document.getElementById("math-status").textContent = "";
+            document.getElementById("math-answer").value = "";
+        }
+
+        async function submitMathAnswer() {
+            if (!currentMathProblem) return;
+            const val = document.getElementById("math-answer").value;
+            const res = await fetch("/math/check", {
+                method: "POST",
+                body: JSON.stringify({ problem: currentMathProblem, answer: Number(val) })
+            });
+            const data = await res.json();
+            const statusEl = document.getElementById("math-status");
+            if (data.correct) {
+                statusEl.textContent = "✅ Correct!";
+                statusEl.className = "mt-6 text-green-400 font-medium";
+                fetchMathProblem();
+            } else {
+                statusEl.textContent = `❌ Incorrect. Answer: ${data.correct_answer}`;
+                statusEl.className = "mt-6 text-red-400 font-medium";
+            }
+        }
+
+        // NUMBER GUESSER
+        let ngActive = false;
+        async function startNumberGame() {
+            const res = await fetch("/number/start");
+            const data = await res.json();
+            ngActive = true;
+            document.getElementById("ng-range").textContent = `Range: ${data.range[0]} - ${data.range[1]}`;
+            document.getElementById("ng-status").textContent = "Game started! Enter a guess.";
+        }
+
+        async function submitNumberGuess() {
+            if (!ngActive) return;
+            const val = document.getElementById("ng-guess").value;
+            const res = await fetch("/number/guess", {
+                method: "POST",
+                body: JSON.stringify({ guess: Number(val) })
+            });
+            const data = await res.json();
+            const statusEl = document.getElementById("ng-status");
+            if (data.correct) {
+                statusEl.textContent = `🏆 WIN! You earned ${data.points} points.`;
+                statusEl.className = "text-green-400 font-bold";
+                ngActive = false;
+            } else {
+                statusEl.textContent = `Try ${data.hint.toUpperCase()}.`;
+                statusEl.className = "text-blue-400 font-medium";
+            }
+        }
+
+        // MEMORY BANK
+        let memoryProblems = [];
+        async function loadMemoryQuestions() {
+            const name = document.getElementById("mb-student").value;
+            const res = await fetch("/memory/problems/" + encodeURIComponent(name));
+            const data = await res.json();
+            const container = document.getElementById("mb-container");
+
+            container.innerHTML = "";
+            if (!data.length) {
+                document.getElementById("mb-status").textContent = "No data found.";
+                container.classList.add("hidden");
+                return;
+            }
+
+            memoryProblems = data;
+            container.classList.remove("hidden");
+            document.getElementById("mb-status").textContent = `Loaded ${data.length} questions.`;
+
+            const btn = document.getElementById("mb-submit-btn");
+            btn.disabled = false;
+            btn.className = "w-full bg-green-600 text-white font-bold py-3 rounded-xl transition";
+
+            data.forEach((q, i) => {
+                const div = document.createElement("div");
+                div.className = "bg-slate-950 p-4 rounded-xl border border-slate-800";
+                div.innerHTML = `
+                    <p class="font-bold text-slate-300 mb-2">Q${i+1}: ${q.problem}</p>
+                    <input type="text" id="mb-ans-${i}" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        async function submitMemoryQuiz() {
+            const name = document.getElementById("mb-student").value;
+            const answers = memoryProblems.map((_, i) => document.getElementById(`mb-ans-${i}`).value);
+            const res = await fetch("/memory/submit", {
+                method: "POST",
+                body: JSON.stringify({ student: name, answers })
+            });
+            const data = await res.json();
+            document.getElementById("mb-status").innerHTML = `<span class="text-green-400">Score: ${data.score}</span>`;
+        }
+
+        // HUD
+        async function updateHud() {
+            const res = await fetch("/api/player");
+            const data = await res.json();
+            document.getElementById("hud-math").textContent = data.score_answer_checker;
+            document.getElementById("hud-guess").textContent = data.score_number_guesser;
+            document.getElementById("hud-memory").textContent = data.score_memory_bank;
+            document.getElementById("hud-json").textContent = JSON.stringify(data, null, 2);
+        }
+    </script>
+
+</body>
+</html>
