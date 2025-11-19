@@ -1,4 +1,17 @@
 # Datamon-Catchup
+Fixed import errors by updating filenames and import paths
+Moved HTML into Flask’s templates/ directory
+Added the full Tailwind SPA dashboard
+Resolved port conflicts (AirPlay / zombie Flask processes)
+Confirmed server is now running successfully
+Cleaned file structure to match Flask standards
+Datamon is now a interactive learning suite that includes:
+Math Checker
+Number Guesser
+Memory Bank Quiz System
+Live HUD stats panel
+Originally a Python CLI app, this version has been upgraded into a full web-based single-page application (SPA) powered by Flask (backend) and TailwindCSS (frontend).
+
 Datamon — Streamlit Math Learning for Every Student
 Datamon is an accessible, browser-based learning platform built specifically for students who may not have access to tutors, premium learning apps, or advanced devices. Powered by Streamlit, it runs entirely in the web browser — meaning any student with basic Wi-Fi or cell data can begin learning instantly, without needing to install software or own a high-end computer.
 The purpose of Datamon is to remove educational barriers by delivering free, real-time math guidance and practicethrough interactive tools like a Math Checker, Number Guesser logic challenge, and a customizable Memory Bank quiz system. Unlike expensive tutoring apps, Datamon is designed to be lightweight, device-friendly, and human-centered, making it usable on low-power laptops, school Chromebooks, public library computers, and even shared family devices.
